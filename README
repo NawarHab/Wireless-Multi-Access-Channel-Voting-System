@@ -1,6 +1,6 @@
-voteino
+VOTEINO
 =======
 
 DESCRIPTION:
 
-Arduino based voteing system, which uses a transceiver to allocate hundreds of voterremotes
+Arduino based voteing system, which can manage hundreds of voterremotes
