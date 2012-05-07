@@ -16,4 +16,4 @@ cd /var/tmp
 git clone git://github.com/aaronds/arduino-nrf24l01.git
 mv arduino-nrf24l01/Mirf /usr/local/arduino-1.0/libraries
 git clone git://github.com/silps/voteino.git
-mv voteino_*.ino /usr/local/arduino-1.0/libraries/Mirf/examples/
+mv voteino/voteino_*.ino /usr/local/arduino-1.0/libraries/Mirf/examples/
