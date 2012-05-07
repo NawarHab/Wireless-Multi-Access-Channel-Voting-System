@@ -4,3 +4,16 @@ VOTEINO
 DESCRIPTION:
 
 Arduino based voteing system, which can manage hundreds of voterremotes
+
+INSTALLATION:
+
+steps:
+1) donwload and copy the tranceiver library to your arduino libraries folder
+2) dowlonad and add the voteino examples to the tranceiver library examples folder
+
+commands:
+cd /var/tmp
+git clone git://github.com/aaronds/arduino-nrf24l01.git
+mv Mirf/ /usr/local/arduino-1.0/libraries
+git clone git://github.com/silps/voteino.git
+mv voteino_*.ino /usr/local/arduino-1.0/libraries/Mirf/examples/
