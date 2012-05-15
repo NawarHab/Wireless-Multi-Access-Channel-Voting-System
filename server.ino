@@ -11,12 +11,23 @@
  * CE -> 8
  * CSN -> 7
  *
+ * Note: To see best case latency comment out all Serial.println
  */
 
 #include <SPI.h>
 #include <Mirf.h>
 #include <nRF24L01.h>
 #include <MirfHardwareSpiDriver.h>
+
+struct Message {
+  uint8_t id;
+  //uint8_t destination;
+  //uint8_t source;
+  uint8_t command;
+  uint8_t checksum[2];
+}
+
+Message message;
 
 void setup() {
   Serial.begin( 9600 );
@@ -40,9 +51,9 @@ void setup() {
   /* Initialize SPI communication to tranceiver */
   Mirf.init();
   /* Set our device address */
-  Mirf.setRADDR( (byte *) "voting_server" );
+  Mirf.setRADDR( (byte *) "server" );
   /* Set client address */
-  Mirf.setTADDR( (byte *) "voting_client" );
+  Mirf.setTADDR( (byte *) "client" );
   /* Configure and power up tranceiver */
   Mirf.config();
   
@@ -55,7 +66,7 @@ void loop() {
   
   /* When sending is complete and we received something */
   if ( !Mirf.isSending() && Mirf.dataReady() ) {
-    Serial.println("Got packet");
+    Serial.println( "Got packet" );
     
     /* Get the data packet from the tranceiver */
     Mirf.getData( data );
@@ -64,7 +75,8 @@ void loop() {
 
     /* Send the response data packet to the client */
     Mirf.send( data );
-      
-    Serial.println("Reply sent.");
+    
+    Serial.println( "Reply sent" );
   }
 }
+
