@@ -3,9 +3,12 @@ VOTEINO
 
 DESCRIPTION:
 
-Arduino based voteing system, which can manage hundreds of voterremotes
+Arduino based voteing system, which can manage hundreds of voteremotes
 
 INSTALLATION:
+
+tips:
+in Mirf.h you need to change WProgram.h include to Arduino.h when using arduino 1.0
 
 steps:
 1) donwload and copy the tranceiver library to your arduino libraries folder
