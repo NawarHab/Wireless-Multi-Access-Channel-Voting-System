@@ -20,14 +20,18 @@
 #include <MirfHardwareSpiDriver.h>
 
 struct Message {
-  uint8_t id;
+  byte id;
   //uint8_t destination;
   //uint8_t source;
-  uint8_t data;
-  uint8_t checksum[2];
+  byte data;
+  byte checksum[2];
 };
 
-Message message;
+Message tx_message;
+Message rx_message;
+/* Initialy our recieving status is 0 and finished is false */
+uint8_t rx_stat = 0;
+volatile bool rx_finished = false;
 
 void setup() {
   Serial.begin( 9600 );
@@ -79,41 +83,53 @@ uint8_t getButton() {
   return 0;
 }
 
-int sendPacket() {
-  /* Timeout for receiving */
-  long time = millis();
-  
+int receivePacket() {
+  /* when nothing was received */
+  if ( !Mirf.dataReady() ) return 1;
+  byte b;
+  Mirf.getData( (byte *) b );
+  /* according to our status we save the received byte and go to next state */
+  switch ( rx_stat ) {
+    case 0: rx_message.id = b; rx_stat = 1; break;
+    case 1: rx_message.data = b; rx_stat = 2; break;
+    case 2: rx_message.checksum[0] = b; rx_stat = 3; break;
+    case 3: rx_message.checksum[1] = b; rx_finished = true; rx_stat = 0; break;
+    default: Serial.println( "Receiving status was changed illegaly!" ); break;
+  }
+  return 0;
+}
+
+int transmitPacket() {
   /* Send the data packet */
-  Mirf.send( (byte *) message.id );
-  Mirf.send( (byte *) message.data );
-  Mirf.send( (byte *) message.checksum[0] );
-  Mirf.send( (byte *) message.checksum[1] );
+  Mirf.send( (byte *) tx_message.id );
+  Mirf.send( (byte *) tx_message.data );
+  Mirf.send( (byte *) tx_message.checksum[0] );
+  Mirf.send( (byte *) tx_message.checksum[1] );
   
-  /* While data is still transmitted */
+  /* Wait for data to be transmitted */
   while ( Mirf.isSending() );
   Serial.println( "Finished sending" );
   delay( 10 );
+}
+
+void g() {
+  /* transmit the datapacket */
+  transmitPacket();
   
-  /* While we are receiving the data packet */
-  while ( !Mirf.dataReady() );
-  
-  Serial.print( "received: " );
-  /* Get the byte from the tranceiver */
-  Mirf.getData( (byte *) message.data );
-  /* TODO: do something useful */
-  int i;
-  for ( i = 0; i < Mirf.payload; ) {
-    Serial.println( (char) message.data );
-  }
-  
-  /* Timeout when data packet was not received within 1 second */
-  if ( ( millis() - time ) > 1000 ) {
-    Serial.println("Timeout on response from server!");
-    return 1;
+  /* timeout for receiving */
+  long time = millis();
+  while ( !rx_finished ) {
+    /* if we received successfuly, refresh timeout */
+    if( receivePacket() == 0 ) time = millis();
+    
+    /* Timeout when data packet was not received within 1 second */
+    if ( ( millis() - time ) > 1000 ) {
+      Serial.println( "Timeout on response from server!" );
+      //return 1;
+    }
   }
   
   /* When transmission was successful */
-  return 0;
 }
 
 void loop() {
@@ -122,5 +138,9 @@ void loop() {
     digitalWrite( 9, HIGH );
     Serial.println( "Finished sending!" );
   }
+  
+  
+  /* don't freeze the MCU */
+  delay( 100 );
 }
 
