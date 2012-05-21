@@ -85,8 +85,13 @@ uint8_t getButton() {
 }
 
 int sendPacket() {
+  /* Timeout for receiving */
+  long time = millis();
+  
   /* Send the data packet */
+  Mirf.send( (byte *) message.id ); 
   Mirf.send( (byte *) message.data );
+  Mirf.sned( (byte *) message.
   
   /* While data is still transmitted */
   while ( Mirf.isSending() );
@@ -116,9 +121,6 @@ int sendPacket() {
 }
 
 void loop() {
-  /* Timeout for receiving */
-  long time = millis();
-  
   /* Wait for button to be pressed, TODO: implement interrupt */
   if ( getButton() > 0 ) {
     digitalWrite( 9, HIGH );
