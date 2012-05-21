@@ -72,27 +72,19 @@ void setup() {
 }
 
 uint8_t getButton() {
-  if ( digitalRead(2) == LOW )
-    return 2;
-  else if ( digitalRead(3) == LOW )
-    return 3;
-  else if ( digitalRead(4) == LOW )
-    return 4;
-  else if ( digitalRead(5) == LOW )
-    return 5;
-  else if ( digitalRead(6) == LOW )
-    return 6;
-  else
-    return -1;
+  int i;
+  for ( i = 2; i < 7; i++ ) {
+    if ( digitalRead( i ) ) {
+      Serial.print( "button " );
+      Serial.print( i );
+      Serial.println( " was pressed" );
+      return i;
+    }
+  }
+  return 0;
 }
 
-void loop() {
-  /* Timeout for receiving */
-  long time = millis();
-  
-  /* Wait for button to be pressed, TODO: implement interrupt */
-  while ( getButton() > -1 );
-  
+int sendPacket() {
   /* Send the data packet */
   Mirf.send( (byte *) message.data );
   
@@ -116,10 +108,21 @@ void loop() {
   /* Timeout when data packet was not received within 1 second */
   if ( ( millis() - time ) > 1000 ) {
     Serial.println("Timeout on response from server!");
-    return;
+    return 1;
   }
   
   /* When transmission was successful */
-  delay(1000);
+  return 0;
+}
+
+void loop() {
+  /* Timeout for receiving */
+  long time = millis();
+  
+  /* Wait for button to be pressed, TODO: implement interrupt */
+  if ( getButton() > 0 ) {
+    digitalWrite( 9, HIGH );
+    Serial.println( "Finished sending!" );
+  }
 }
 
