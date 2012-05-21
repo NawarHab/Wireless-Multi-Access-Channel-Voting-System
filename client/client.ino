@@ -58,22 +58,17 @@ void setup() {
   Mirf.config();
   
   /* Initialize button */
-  pinMode( 2, INPUT );
-  digitalWrite( 2, HIGH );
-  pinMode( 3, INPUT );
-  digitalWrite( 3, HIGH );
-  pinMode(4, INPUT );
-  digitalWrite( 4, HIGH );
-  pinMode(5, INPUT );
-  digitalWrite( 5, HIGH );
-  pinMode( 6, INPUT );
-  digitalWrite( 6, HIGH );
+  int i;
+  for ( i = 2; i <= 6; i++ ) {
+    pinMode( i, INPUT );
+    digitalWrite( i, LOW );
+  }
   Serial.println( "Beginning ... " );
 }
 
 uint8_t getButton() {
   int i;
-  for ( i = 2; i < 7; i++ ) {
+  for ( i = 2; i <= 6; i++ ) {
     if ( digitalRead( i ) ) {
       Serial.print( "button " );
       Serial.print( i );
@@ -89,9 +84,10 @@ int sendPacket() {
   long time = millis();
   
   /* Send the data packet */
-  Mirf.send( (byte *) message.id ); 
+  Mirf.send( (byte *) message.id );
   Mirf.send( (byte *) message.data );
-  Mirf.sned( (byte *) message.
+  Mirf.send( (byte *) message.checksum[0] );
+  Mirf.send( (byte *) message.checksum[1] );
   
   /* While data is still transmitted */
   while ( Mirf.isSending() );
