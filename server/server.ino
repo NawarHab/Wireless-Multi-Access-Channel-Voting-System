@@ -19,15 +19,20 @@
 #include <nRF24L01.h>
 #include <MirfHardwareSpiDriver.h>
 
-struct Message {
-  uint8_t id;
-  //uint8_t destination;
-  //uint8_t source;
-  uint8_t command;
-  uint8_t checksum[2];
-}
+#define SUCCESS 0
 
-Message message;
+struct Message {
+  byte destination;
+  byte source;
+  byte data;
+  byte checksum;
+};
+
+Message tx_message;
+Message rx_message;
+/* Initialy our recieving status is 0 and finished is false */
+uint8_t rx_stat = 0;
+volatile bool rx_finished = false;
 
 void setup() {
   Serial.begin( 9600 );
@@ -60,23 +65,72 @@ void setup() {
   Serial.println( "Listening ... " );
 }
 
+/*
+ * function to receive datapacket, must be called several times
+ * to receive all the bytes
+ * returns - 0 when successfuly received
+ *           1 when data is not ready to be read
+ *           2 when receiving status was illegaly changed
+ */
+uint8_t receivePacket() {
+  /* when nothing was received */
+  if ( !Mirf.dataReady() ) return 1;
+  byte b;
+  Mirf.getData( &b );
+  /* according to our status we save the received byte and go to next state */
+  switch ( rx_stat ) {
+    case 0: rx_message.destination = b; rx_stat = 1; break;
+    case 1: rx_message.source = b; rx_stat = 2; break;
+    case 2: rx_message.data = b; rx_stat = 3; break;
+    /* TODO: implement checksum verification */
+    case 3: rx_message.checksum = b; rx_finished = true; rx_stat = 0; break;
+    default: Serial.println( "Status illegaly changed!" ); rx_stat = 0; return 2;
+  }
+  return SUCCESS;
+}
+
+/* 
+ * function to transmits the datapacket to the server
+ * return - 0 when transmission successfuly finished
+ */
+uint8_t transmitPacket() {
+  tx_message.destination = 0xA2;
+  tx_message.source = 0xA1;
+  tx_message.data = 0x1F;
+  /* calculate the checksum, use XOR */
+  tx_message.checksum = 0x00;
+  tx_message.checksum ^= tx_message.destination;
+  tx_message.checksum ^= tx_message.source;
+  tx_message.checksum ^= tx_message.data;
+  /* Send the data packet */
+  Mirf.send( &tx_message.destination );
+  Mirf.send( &tx_message.source );
+  Mirf.send( &tx_message.data );
+  Mirf.send( &tx_message.checksum );
+  
+  /* Wait for data to be transmitted */
+  while ( Mirf.isSending() );
+  delay( 10 );
+  
+  return SUCCESS;
+}
+
 void loop() {
   /* A buffer to store the data packet */
   byte data[Mirf.payload];
   
-  /* When sending is complete and we received something */
-  if ( !Mirf.isSending() && Mirf.dataReady() ) {
-    Serial.println( "Got packet" );
-    
-    /* Get the data packet from the tranceiver */
-    Mirf.getData( data );
-    
-    /* TODO: implement address request packet and send address for clients */
-
-    /* Send the response data packet to the client */
-    Mirf.send( data );
-    
-    Serial.println( "Reply sent" );
+  /* while we are receiving packet */
+  while ( !rx_finished ) {
+    if ( receivePacket() == SUCCESS );
+    /* don't freeze the MCU */
+    delay( 10 );
   }
+  Serial.println( "Got packet" );
+  /* reset receiving status */
+  rx_finished = false;
+  
+  /* send verification */
+  if ( transmitPacket() == SUCCESS )
+    Serial.println( "Reply sent" );
 }
 
