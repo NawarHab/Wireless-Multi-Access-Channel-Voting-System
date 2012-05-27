@@ -81,8 +81,11 @@ uint8_t readButtons( uint8_t* button ) {
   /* go trough all the button and check which one was pressed */
   for ( i = 2; i <= 6; i++ )
     if ( digitalRead( i ) ) *button = i; else continue;
-  Serial.print( "button was pressed, nr " );
-  Serial.println( *button );
+  if ( *button != 0 ) { 
+    Serial.print( "button was pressed, nr " );
+    Serial.println( *button );
+  }
+  
   return SUCCESS;
 }
 
@@ -98,7 +101,7 @@ uint8_t receivePacket() {
   /* when nothing was received */
   if ( !Mirf.dataReady() ) return 1;
   byte b;
-  Mirf.getData( &b );
+  Mirf.getData( (byte *) b );
   /* according to our status we save the received byte and go to next state */
   switch ( rx_stat ) {
     case 0: rx_message.destination = b; rx_stat = 1; break;
@@ -125,10 +128,10 @@ uint8_t transmitPacket() {
   tx_message.checksum ^= tx_message.source;
   tx_message.checksum ^= tx_message.data;
   /* Send the data packet */
-  Mirf.send( &tx_message.destination );
-  Mirf.send( &tx_message.source );
-  Mirf.send( &tx_message.data );
-  Mirf.send( &tx_message.checksum );
+  Mirf.send( (byte *) tx_message.destination );
+  Mirf.send( (byte *) tx_message.source );
+  Mirf.send( (byte *) tx_message.data );
+  Mirf.send( (byte *) tx_message.checksum );
   
   /* Wait for data to be transmitted */
   while ( Mirf.isSending() );
@@ -162,19 +165,21 @@ uint8_t timeoutReceive() {
 }
 
 void loop() {
-  uint8_t button;
-  readButtons( &button );
+  //uint8_t button;
+  //readButtons( &button );
   /* Wait for button to be pressed, TODO: implement interrupt */
-  if ( button > NO_BUTTON ) {
+  /*if ( button > NO_BUTTON ) {
     digitalWrite( 9, HIGH );
-    Serial.println( "Finished sending!" );
-  }
+    delay(1000);
+  }*/
   
   /* transmit and receive acknowledgement */
-  //transmitPacket();
-  //timeoutReceive();
+  transmitPacket();
+  while( !Mirf.dataReady() );
+  if ( timeoutReceive() == SUCCESS )
+    Serial.println( "Verification received!" );
   
   /* don't freeze the MCU */
-  delay( 100 );
+  delay( 100000 );
 }
 
