@@ -20,6 +20,7 @@
 #include <MirfHardwareSpiDriver.h>
 
 #define SUCCESS 0
+#define NO_DATA 1
 
 struct Message {
   byte destination;
@@ -74,12 +75,12 @@ void setup() {
  */
 uint8_t receivePacket() {
   /* when nothing was received */
-  if ( !Mirf.dataReady() ) return 1;
+  if ( !Mirf.dataReady() ) return NO_DATA;
   byte b;
-  Mirf.getData( &b );
+  Mirf.getData( (byte *) b );
   /* according to our status we save the received byte and go to next state */
   switch ( rx_stat ) {
-    case 0: rx_message.destination = b; rx_stat = 1; break;
+    case 0: if ( b == 0xA1 ) { rx_message.destination = b; rx_stat = 1; } break;
     case 1: rx_message.source = b; rx_stat = 2; break;
     case 2: rx_message.data = b; rx_stat = 3; break;
     /* TODO: implement checksum verification */
@@ -103,10 +104,10 @@ uint8_t transmitPacket() {
   tx_message.checksum ^= tx_message.source;
   tx_message.checksum ^= tx_message.data;
   /* Send the data packet */
-  Mirf.send( &tx_message.destination );
-  Mirf.send( &tx_message.source );
-  Mirf.send( &tx_message.data );
-  Mirf.send( &tx_message.checksum );
+  Mirf.send( (byte *) tx_message.destination );
+  Mirf.send( (byte *) tx_message.source );
+  Mirf.send( (byte *) tx_message.data );
+  Mirf.send( (byte *) tx_message.checksum );
   
   /* Wait for data to be transmitted */
   while ( Mirf.isSending() );
@@ -121,16 +122,20 @@ void loop() {
   
   /* while we are receiving packet */
   while ( !rx_finished ) {
-    if ( receivePacket() == SUCCESS );
+    if ( receivePacket() == SUCCESS )
+      Serial.println( "got byte" );
     /* don't freeze the MCU */
-    delay( 10 );
+    delay( 100 );
   }
-  Serial.println( "Got packet" );
+  Serial.print( "Got packet: " );
+  Serial.print( rx_message.destination, HEX );
+  Serial.print( rx_message.source, HEX );
+  Serial.print( rx_message.data, HEX );
   /* reset receiving status */
   rx_finished = false;
   
   /* send verification */
   if ( transmitPacket() == SUCCESS )
-    Serial.println( "Reply sent" );
+    Serial.println( "Ack sent" );
 }
 
