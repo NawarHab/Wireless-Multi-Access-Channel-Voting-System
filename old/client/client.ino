@@ -19,22 +19,22 @@
 #include <nRF24L01.h>
 #include <MirfHardwareSpiDriver.h>
 
+/* Return codes */
 #define NO_BUTTON 0
 #define SUCCESS 0
 #define TIMEOUT 1
+#define NO_DATA 1
 
-struct Message {
-  byte destination;
-  byte source;
-  byte data;
-  byte checksum;
-};
-
-Message tx_message;
-Message rx_message;
-/* Initialy our recieving status is 0 and finished is false */
-uint8_t rx_stat = 0;
-volatile bool rx_finished = false;
+/* RX/TX packet structure */
+#define CLIENT 0xC1
+#define ACK 0xAC
+#define DESTINATION 0
+#define SOURCE 1
+#define DATA 2
+#define CHECKSUM 3
+#define PACKET_LEN 4
+byte tx_message[PACKET_LEN];
+byte rx_message[PACKET_LEN];
 
 void setup() {
   Serial.begin( 9600 );
@@ -48,7 +48,7 @@ void setup() {
   /* Set the payload length, 1 data packet size (5 bytes)
    * IMPORTANT!: payload on client and server must be the same
    */
-  Mirf.payload = sizeof( byte ) * 5;
+  Mirf.payload = sizeof( byte ) * PACKET_LEN;
   
   /* Set transmission channel
    * IMPORTANT!: make sure channel is legal in your area
@@ -78,10 +78,11 @@ void setup() {
 uint8_t readButtons( uint8_t* button ) {
   *button = NO_BUTTON;
   int i;
-  /* go trough all the button and check which one was pressed */
+  /* Go trough all the button and check if one was pressed */
   for ( i = 2; i <= 6; i++ )
     if ( digitalRead( i ) ) *button = i; else continue;
-  if ( *button != 0 ) { 
+  /* When any of the buttons was pressed */
+  if ( *button != 0 ) {
     Serial.print( "button was pressed, nr " );
     Serial.println( *button );
   }
@@ -98,19 +99,10 @@ uint8_t readButtons( uint8_t* button ) {
  *           2 when receiving status was illegaly changed
  */
 uint8_t receivePacket() {
-  /* when nothing was received */
-  if ( !Mirf.dataReady() ) return 1;
-  byte b;
-  Mirf.getData( (byte *) b );
-  /* according to our status we save the received byte and go to next state */
-  switch ( rx_stat ) {
-    case 0: rx_message.destination = b; rx_stat = 1; break;
-    case 1: rx_message.source = b; rx_stat = 2; break;
-    case 2: rx_message.data = b; rx_stat = 3; break;
-    /* TODO: implement checksum verification */
-    case 3: rx_message.checksum = b; rx_finished = true; rx_stat = 0; break;
-    default: Serial.println( "Status illegaly changed!" ); rx_stat = 0; return 2;
-  }
+  /* When nothing was received */
+  if ( !Mirf.dataReady() ) return NO_DATA;
+  Mirf.getData( rx_message );
+  Serial.println( "Packet received" );
   return SUCCESS;
 }
 
@@ -118,20 +110,18 @@ uint8_t receivePacket() {
  * function to transmits the datapacket to the server
  * return - 0 when transmission successfuly finished
  */
-uint8_t transmitPacket() {
-  tx_message.destination = 0xA1;
-  tx_message.source = 0xA2;
-  tx_message.data = 0x01;
-  /* calculate the checksum, use XOR */
-  tx_message.checksum = 0x00;
-  tx_message.checksum ^= tx_message.destination;
-  tx_message.checksum ^= tx_message.source;
-  tx_message.checksum ^= tx_message.data;
+uint8_t transmitPacket( byte data ) {  
+  tx_message[DESTINATION] = 0xB1;
+  tx_message[SOURCE] = CLIENT;
+  tx_message[DATA] = data;
+  /* Calculate the checksum, using XOR */
+  tx_message[CHECKSUM] = 0x00;
+  int i;
+  /* Calculate the checksum for the data packet */
+  for ( i = 0; i < PACKET_LEN - 1; i++ )
+    tx_message[CHECKSUM] ^= tx_message[i];
   /* Send the data packet */
-  Mirf.send( (byte *) tx_message.destination );
-  Mirf.send( (byte *) tx_message.source );
-  Mirf.send( (byte *) tx_message.data );
-  Mirf.send( (byte *) tx_message.checksum );
+  Mirf.send( tx_message );
   
   /* Wait for data to be transmitted */
   while ( Mirf.isSending() );
@@ -146,10 +136,10 @@ uint8_t transmitPacket() {
  * returns - 0 when successful, 1 when timeout
  */
 uint8_t timeoutReceive() {
-  /* timeout for receiving */
+  /* Timeout for receiving */
   long time = millis();
-  while ( !rx_finished ) {
-    /* if we received byte successfuly, refresh timeout */
+  while ( /*!rx_finished*/ 1 ) {
+    /* When we received byte successfuly, refresh timeout */
     if( receivePacket() == SUCCESS ) time = millis();
     
     /* Timeout when data packet was not received within 1 second */
@@ -158,8 +148,6 @@ uint8_t timeoutReceive() {
       return TIMEOUT;
     }
   }
-  /* reset receiving status */
-  rx_finished = false;
   /* When transmission was successful */
   return SUCCESS;
 }
@@ -173,13 +161,15 @@ void loop() {
     delay(1000);
   }*/
   
-  /* transmit and receive acknowledgement */
-  transmitPacket();
-  while( !Mirf.dataReady() );
-  if ( timeoutReceive() == SUCCESS )
-    Serial.println( "Verification received!" );
+  /* Transmit the button and receive acknowledgement */
+  transmitPacket( (byte) 0x01 );
+  while( receivePacket() == NO_DATA ) delay(10);
   
-  /* don't freeze the MCU */
-  delay( 100000 );
+  /* When the destination is us and we received ACK */
+  if ( rx_message[DESTINATION] == CLIENT && rx_message[DATA] == ACK )
+    Serial.println( "Ack received" );
+  
+  /* Don't freeze the MCU */
+  delay( 1000 );
 }
 
