@@ -1,5 +1,6 @@
 /*
  Copyright (C) 2011 J. Coliz <maniacbug@ymail.com>
+ Edit by (C) 2012 S. Kuusik <silver.kuusik@gmail.com>
 
  This program is free software; you can redistribute it and/or
  modify it under the terms of the GNU General Public License
@@ -7,13 +8,9 @@
  */
 
 /**
- * Example for Getting Started with nRF24L01+ radios. 
+ * Voteino client and server.
  *
- * This is an example of how to use the RF24 class.  Write this sketch to two 
- * different nodes.  Put one of the nodes into 'transmit' mode by connecting 
- * with the serial monitor and sending a 'T'.  The ping node sends the current 
- * time to the pong node, which responds by sending the value back.  The ping 
- * node can then see how long the whole cycle took.
+ * This is a multiuser voting system for nRF24L01+. It uses the RF24 library.
  */
 
 #include <SPI.h>
@@ -21,50 +18,70 @@
 #include "RF24.h"
 #include "printf.h"
 
-#define SUCCESS 1
+/* MAY NEED TO BE CHANGED FOR DIFFERENT STATIONS */
+/* Switch on = 1 or off = 0 for debug messages */
+#define DEBUG 1
+/* Voting buttons for clients */
+#define BUTTONS_COUNT 4
+uint8_t buttons[BUTTONS_COUNT] = { 3, 4, 5, 6 };
+/* Role IDs */
+uint8_t server_id = 0xB0;
+uint8_t client_id = 0xC0;
+/* The role of the current running sketch */
+uint8_t role_id = client_id;
+
+/* CONSTANTS */
+#define SUCCESS 0
 #define NO_BUTTON 0
-/* RX/TX packet structure */
-#define ACK 0xAC
+#define TIMEOUT 1
+#define WRONG_DESTINATION 2
+/* RX/TX PACKET STRUCTURE */
 #define DESTINATION 0
 #define SOURCE 1
-#define DATA 2
-//#define CHECKSUM 3
-#define PACKET_LEN 3
-#define PAYLOAD ( sizeof( byte ) * PACKET_LEN )
-byte tx_message[PACKET_LEN];
-byte rx_message[PACKET_LEN];
+#define COMMAND 2
+#define DATA 3
+/* Each packet is 3 bytes */
+#define PAYLOAD 4
+byte tx_message[PAYLOAD];
+byte rx_message[PAYLOAD];
+/* Command codes */
+#define VOTE_ACK 0xAC
+#define VOTE_ID 0xAB
+#define VOTE_STATUS 0xEA
+#define REQUEST_ACK 0xEC
+#define REQUEST_ID 0x1D
+/* For debugging */
+#define debug_printf( args ... ) if ( DEBUG ) printf( args )
+/* Voting state */
+boolean voting_active = false;
 
-/* May need to be changed for different stations */
-#define DEBUG 0
-#define SERVER_ID 0xB1
-#define CLIENT_ID 0xC1
-#define BUTTONS_COUNT 1
-uint8_t buttons[BUTTONS_COUNT] = { 3 };
-/* The role of the current running sketch */
-uint8_t role_id = CLIENT_ID;
+/* RADIO CONFIGURATION */
 
-//
-// Hardware configuration
-//
+/* Set up nRF24L01 radio on SPI bus plus pins CE 8 & CSN 7 */
+RF24 radio( 8, 7 );
 
-// Set up nRF24L01 radio on SPI bus plus pins 9 & 10 
-// CE 9, CSN 10
-RF24 radio(8, 7 );
-
-//
-// Topology
-//
-
-// Radio pipe addresses for the 2 nodes to communicate.
-// why LL ?
+/* Radio pipe addresses for the 2 nodes to communicate (why LL) ? */
 const uint64_t pipes[2] = { 0xF0F0F0F0E1LL, 0xF0F0F0F0D2LL };
 
-//
-// Role management
-//
-// Set up role.  This sketch uses the same software for all the nodes
-// in this system.  Doing so greatly simplifies testing.  
-//
+/* number of clients who are voting */
+uint8_t client_count = 0;
+uint8_t clients[10];
+
+/*
+ * function to get a client ID from the ID pool
+ * return - 0 when successful
+ * return - 1 when no more IDs left
+ */
+uint8_t getClientID( uint8_t* id ) {
+  /* increase number of clients */
+  client_count++;
+  /* generate a new ID for the client */
+  *id = client_id + client_count;
+  /* add the generated ID to the list */
+  clients[ client_count - 1 ] = *id;
+  debug_printf( "id %X was generated...", *id );
+  return SUCCESS;
+}
 
 /*
  * function to check which button was pressed
@@ -77,143 +94,160 @@ uint8_t getPressedButton( uint8_t* button ) {
   for ( i = 0; i < BUTTONS_COUNT; i++ )
     if ( digitalRead( buttons[i] ) ) *button = buttons[i]; else continue;
   /* When any of the buttons was pressed */
-  if ( *button != 0 ) 
-    if ( DEBUG ) printf( "...button %d was pressed...", *button );
+  if ( *button != 0 )
+    debug_printf( "button %d was pressed...", *button );
   
+  return SUCCESS;
+}
+
+/*
+ * function to receive datapacket
+ * return - 0 when reception was successful
+ */
+uint8_t receivePacket( boolean timeout ) {
+  int i;
+  for ( i = 0; i < PAYLOAD; i++ ) 
+    rx_message[i] = 0x00;
+  if ( !timeout ) {
+    boolean done = false;
+    while ( !radio.available() );
+    while ( !done )
+      done = radio.read( rx_message, radio.getPayloadSize() );
+  } else {
+    // Wait here until we get a response, or timeout (200ms)
+    unsigned long started_waiting_at = millis();
+    bool timeout = false;
+    while ( !radio.available() && !timeout )
+      if ( millis() - started_waiting_at > 200 )
+        timeout = true;
+
+    // Describe the results
+    if ( timeout ) {
+      debug_printf("Failed, response timed out.\n\r");
+      return TIMEOUT;
+    } else {
+      // Grab the response, compare, and send to debugging spew
+      radio.read( rx_message, radio.getPayloadSize() );
+    }
+  }
+  /* only receive packets which are for us */
+  if ( rx_message[DESTINATION] != role_id ) {
+    debug_printf( "different destination %X...", rx_message[DESTINATION] );
+    return WRONG_DESTINATION;
+  }
+  debug_printf( "source %X...", rx_message[SOURCE] );
   return SUCCESS;
 }
 
 /* 
- * function to transmits the datapacket to the server
+ * function to transmits the datapacket
  * return - 0 when transmission successfuly finished
  */
-uint8_t transmitPacket( byte destination, byte data ) {
+uint8_t transmitPacket( byte destination, byte command, byte data ) {
   tx_message[DESTINATION] = destination;
   tx_message[SOURCE] = role_id;
+  tx_message[COMMAND] = command;
   tx_message[DATA] = data;
+  //tx_message[CHECKSUM] = destination ^ role_id ^ data;
   
+  /* First, stop listening so we can talk */
+  radio.stopListening();
+  /* send the packet to the chosen destination */
   bool ok = radio.write( tx_message, radio.getPayloadSize() );
-    
-  //if ( ok )
-    //printf( "ok..." );
-  //else
-    //printf( "failed.\n\r" );
+  /* Now, resume listening so we catch the next packets. */
+  radio.startListening();
+  
+  /* When the transmission was successful */
+  if ( ok )
+    debug_printf( "transmit %X ok\n", command );
+  else
+    debug_printf( "failed.\n\r" );
   
   return SUCCESS;
 }
 
-void setup()
-{
-  //
-  // Print init
-  //
+void setup() {
+  /* Initialize serial connection */
   Serial.begin( 57600 );
+  /* Direct printf to Arduino serial */
   printf_begin();
-  if ( DEBUG ) printf( "\n\rRF24/examples/GettingStarted/\n\r" );
 
-  //
-  // Setup and configure rf radio
-  //
-
+  /* Tranceiver configuration */
   radio.begin();
 
-  // optionally, increase the delay between retries & # of retries
-  // delay, retries
+  /* optionally, increase the delay(1) between retries(2) & # of retries */
   radio.setRetries( 15, 15 );
 
   // optionally, reduce the payload size.  seems to
   // improve reliability
   radio.setPayloadSize( PAYLOAD );
-  radio.setAutoAck( false );
-  radio.disableCRC();
-  //
-  // Open pipes to other nodes for communication
-  //
+  radio.setAutoAck( true );
+  radio.setDataRate( RF24_2MBPS );
+  //radio.disableCRC();
 
-  // This simple sketch opens two pipes for these two nodes to communicate
-  // back and forth.
-  // Open 'our' pipe for writing
-  // Open the 'other' pipe for reading, in position #1 (we can have up to 5 pipes open for reading)
+  /* Open 'our' pipe for writing */
+  /* Open the 'other' pipe for reading, in position #1 (we can have up to 5 pipes open for reading) */
 
   pinMode( 9, OUTPUT );
-  if ( role_id == CLIENT_ID )
-  {
-    radio.openWritingPipe(pipes[0]);
-    radio.openReadingPipe(1,pipes[1]);
-    if ( DEBUG ) printf( "ROLE = client" );
-    /* Initialize button (set as input) */
+  if ( role_id == client_id ) {
+    radio.openWritingPipe( pipes[0] );
+    radio.openReadingPipe( 1, pipes[1] );
+    debug_printf( "ROLE = client\n" );
+    /* Initialize defined button (set as input) */
     int i;
-    for ( i = 2; i <= 6; i++ )
-      pinMode( i, INPUT );
-  }
-  else
-  {
-    radio.openWritingPipe(pipes[1]);
-    radio.openReadingPipe(1,pipes[0]);
-    if ( DEBUG ) printf( "ROLE = server" );
+    for ( i = 0; i < BUTTONS_COUNT; i++ )
+      pinMode( buttons[i], INPUT );
+  } else {
+    radio.openWritingPipe( pipes[1] );
+    radio.openReadingPipe( 1, pipes[0] );
+    debug_printf( "ROLE = server\n" );
   }
 
-  //
-  // Start listening
-  //
-
+  /* Start listening */
   radio.startListening();
 
-  //
-  // Dump the configuration of the rf unit for debugging
-  //
-
-  if ( DEBUG ) radio.printDetails();
+  /* Dump the configuration of the rf unit for debugging */
+  if ( DEBUG ) 
+    radio.printDetails();
 }
 
-void loop()
-{
-  //
-  // Ping out role.  Repeatedly send the current time
-  //
-
-  if ( role_id == CLIENT_ID )
-  {
-    // First, stop listening so we can talk.
-    radio.stopListening();
-    
-    uint8_t button = NO_BUTTON;
-    while ( button == NO_BUTTON )
-    {
-      getPressedButton( &button );
-      delay( 100 );
+void loop() {
+  /* Client role, send vote and receive ack */
+  if ( role_id == client_id ) {
+    /* Require new ID */
+    if ( role_id == 0xC0 ) {
+      transmitPacket( server_id, REQUEST_ID, role_id );
+    /* Active voting sate */
+    } else if ( voting_active ) {
+      uint8_t button = NO_BUTTON;
+      while ( button == NO_BUTTON ) {
+        getPressedButton( &button );
+      }
+      /* send packet to server */
+      transmitPacket( server_id, VOTE_ID, (byte) button );
+      
+      /* Take the time, and send it.  This will block until complete */
+      //unsigned long time = micros();
+      /* Transmit and receive time */
+      //debug_printf( "%d\n", micros() - time );
+    /* Done voting or voting dind't start yet */
+    } else {
+      if ( !radio.available() )
+        return;
     }
-    
-    // Take the time, and send it.  This will block until complete
-    unsigned long time = millis();
-    if ( DEBUG ) printf( "Now sending %X...", (byte) button );
-
-    /* send packet to server */
-    transmitPacket( SERVER_ID, (byte) button );
-
-    // Now, continue listening
-    radio.startListening();
-
-    // Wait here until we get a response, or timeout (250ms)
-    unsigned long started_waiting_at = millis();
-    bool timeout = false;
-    while ( ! radio.available() && ! timeout )
-      if ( millis() - started_waiting_at > 200 )
-        timeout = true;
-
-    // Describe the results
-    if ( timeout )
-    {
-      if ( DEBUG ) printf("Failed, response timed out.\n\r");
+    /* Receive ack with timeout */
+    uint8_t response = receivePacket( true );
+    if ( response == TIMEOUT || response == WRONG_DESTINATION ) {
+      return;
     }
-    else
-    {
-      // Grab the response, compare, and send to debugging spew
-      radio.read( rx_message, radio.getPayloadSize() );
-      printf( "...time: %d...", millis() - time );
-      // Spew it
-      if ( DEBUG ) printf( "Got response %X \n", rx_message[DATA] );
-      digitalWrite( 9, HIGH );
+    switch ( rx_message[COMMAND] ) {
+      /* When vote status was received, change the voting status */
+      case VOTE_STATUS: debug_printf( "got vote status %X", rx_message[DATA] ); voting_active = rx_message[DATA]; break;
+      /* When new ID from the server was received, assign it */
+      case REQUEST_ACK: debug_printf( "got new id %X\n", rx_message[DATA] ); role_id = client_id = rx_message[DATA]; break;
+      /* When vote ack was received from server */
+      case VOTE_ACK: debug_printf( "got vote ack from server\n" ); digitalWrite( 9, HIGH ); break;
+      default: debug_printf( "unknown command received %X\n", rx_message[COMMAND] ); break;
     }
 
     // Try again 1s later
@@ -221,41 +255,22 @@ void loop()
     digitalWrite( 9, LOW );
   }
 
-  //
-  // Pong back role.  Receive each packet, dump it out, and send it back
-  //
-
-  if ( role_id == SERVER_ID )
-  {
-    // if there is data ready
-    if ( radio.available() )
-    {
-      // Dump the payloads until we've gotten everything
-      bool done = false;
-      while (!done)
-      {
-        // Fetch the payload, and see if this was the last one.
-        done = radio.read( rx_message, radio.getPayloadSize() );
-
-	// Delay just a little bit to let the other unit
-	// make the transition to receiver
-	delay(20);
-      }
-
-      // Spew it
-      //printf( "Button was pressed %X by client %X...", rx_message[DATA], rx_message[SOURCE] );
-      //digitalWrite( 9, HIGH );
-      // First, stop listening so we can talk
-      radio.stopListening();
-
-      // Send the final one back.
-      transmitPacket( CLIENT_ID, ACK );
-      if ( DEBUG ) printf("Sent ACK.\n\r");
-
-      // Now, resume listening so we catch the next packets.
-      radio.startListening();
-      //digitalWrite( 9, LOW );
+  /* Server role, receive vote and send ack */
+  if ( role_id == server_id ) {
+    //digitalWrite( 9, HIGH );
+    uint8_t response = receivePacket( false );
+    if ( response == WRONG_DESTINATION ) {
+      
+    }
+    //digitalWrite( 9, LOW );
+    
+    switch ( rx_message[COMMAND] ) {
+      /* when ID request was received, generate and send a new ID for the new client */
+      case REQUEST_ID: debug_printf( "id request\n" ); uint8_t id; getClientID( &id ); transmitPacket( rx_message[SOURCE], REQUEST_ACK, id ); break;
+      /* when vote was received, send ack back to the client */
+      case VOTE_ID: debug_printf( "button %X was pressed\n", rx_message[DATA] ); transmitPacket( rx_message[SOURCE], VOTE_ACK, rx_message[DATA] ); break;
+      default: debug_printf( "unknown command received %X\n", rx_message[COMMAND] ); break;
     }
   }
+
 }
-// vim:cin:ai:sts=2 sw=2 ft=cpp
