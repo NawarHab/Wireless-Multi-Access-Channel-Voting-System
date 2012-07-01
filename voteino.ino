@@ -1,3 +1,4 @@
+
 /*
  Copyright (C) 2011 J. Coliz <maniacbug@ymail.com>
  Edit by (C) 2012 S. Kuusik <silver.kuusik@gmail.com>
@@ -19,41 +20,57 @@
 #include "printf.h"
 
 /* MAY NEED TO BE CHANGED FOR DIFFERENT STATIONS */
+#define BAUD_RATE 115200
 /* Switch on = 1 or off = 0 for debug messages */
 #define DEBUG 1
 /* Voting buttons for clients */
 #define BUTTONS_COUNT 4
-uint8_t buttons[BUTTONS_COUNT] = { 3, 4, 5, 6 };
+uint8_t buttons[BUTTONS_COUNT] = { A1, A2, A3, A4 };
 /* Role IDs */
 uint8_t server_id = 0xB0;
 uint8_t client_id = 0xC0;
+uint8_t client_all_id = 0xAA;
 /* The role of the current running sketch */
-uint8_t role_id = client_id;
+uint8_t role_id = server_id;
 
-/* CONSTANTS */
+/* RETURN CODES */
 #define SUCCESS 0
 #define NO_BUTTON 0
-#define TIMEOUT 1
-#define WRONG_DESTINATION 2
+#define NO_DATA 1
+#define TRANSMIT_FAILED 2
+#define WRONG_DESTINATION 3
 /* RX/TX PACKET STRUCTURE */
-#define DESTINATION 0
-#define SOURCE 1
-#define COMMAND 2
-#define DATA 3
-/* Each packet is 3 bytes */
+struct Packet {
+  byte destination;
+  byte source;
+  byte command;
+  byte data;
+};
+/* Each packet is 4 bytes */
 #define PAYLOAD 4
-byte tx_message[PAYLOAD];
-byte rx_message[PAYLOAD];
-/* Command codes */
+
+/* COMMAND CODES */
+/* Sent from server when vote was received */
 #define VOTE_ACK 0xAC
+/* Sent from client when user has voted */
 #define VOTE_ID 0xAB
-#define VOTE_STATUS 0xEA
+/* Sent from server when voting got active/inactive */
+#define VOTE_STATE 0xEA
+/* Sent from server when client requested new ID */
 #define REQUEST_ACK 0xEC
+/* Sent from client when it got active and needs new ID */
 #define REQUEST_ID 0x1D
 /* For debugging */
 #define debug_printf( args ... ) if ( DEBUG ) printf( args )
-/* Voting state */
-boolean voting_active = false;
+/* VOTING STATES */
+#define WAITING_VOTING 0xE1
+#define ACTIVE_VOTING 0xE2
+#define FINISHED_VOTING 0xE3
+#define WAITING_TRANSMISSION 0xE4
+/* Saves the time, so we can wait for a short period */
+unsigned long started_wait_time = 0;
+uint8_t client_old_state;
+uint8_t client_state = REQUEST_ID;
 
 /* RADIO CONFIGURATION */
 
@@ -61,81 +78,74 @@ boolean voting_active = false;
 RF24 radio( 8, 7 );
 
 /* Radio pipe addresses for the 2 nodes to communicate (why LL) ? */
-const uint64_t pipes[2] = { 0xF0F0F0F0E1LL, 0xF0F0F0F0D2LL };
+const uint64_t pipes[2] = { 0xF0F0F0F0AA, 0xF0F0F0F0BB };
 
-/* number of clients who are voting */
+/* Number of clients who are voting */
 uint8_t client_count = 0;
-uint8_t clients[10];
 
 /*
  * function to get a client ID from the ID pool
- * return - 0 when successful
- * return - 1 when no more IDs left
+ * @return - gives the new generated id
  */
-uint8_t getClientID( uint8_t* id ) {
-  /* increase number of clients */
+uint8_t getNewClientID() {
+  /* Increase number of clients */
   client_count++;
-  /* generate a new ID for the client */
-  *id = client_id + client_count;
-  /* add the generated ID to the list */
-  clients[ client_count - 1 ] = *id;
-  debug_printf( "id %X was generated...", *id );
-  return SUCCESS;
+  /* Generate a new ID for the client */
+  uint8_t id = client_id + client_count;
+  debug_printf( "id %X was generated...", id );
+  return id;
+}
+
+/*
+ * function to switch status LEDS
+ * @param green - the green LED status (HIGH or LOW)
+ * @param yellow - the yellow LED status (HIGH or LOW)
+ * @param flash - to make the chosen LED blink every second
+ */
+void setStatusLEDs( boolean green, boolean yellow, boolean flash ) {
+  boolean green_led_status = green;
+  boolean yellow_led_status = yellow;
+  if ( flash ) {
+    /* Change status every second */
+    green_led_status = green && !((millis() / 1000) % 2);
+    yellow_led_status = yellow && !((millis() /1000) % 2);
+  }
+  /* Set the status of the LEDs */
+  digitalWrite( 10, green_led_status );
+  digitalWrite( 9, yellow_led_status );
 }
 
 /*
  * function to check which button was pressed
- * return - 0 when button was successfuly read
+ * @return - the pressed button or NO_BUTTON
  */
-uint8_t getPressedButton( uint8_t* button ) {
-  *button = NO_BUTTON;
+uint8_t getPressedButton() {
+  uint8_t button = NO_BUTTON;
   int i;
   /* Go trough all the button and check if one was pressed */
   for ( i = 0; i < BUTTONS_COUNT; i++ )
-    if ( digitalRead( buttons[i] ) ) *button = buttons[i]; else continue;
+    if ( analogRead( buttons[i] ) > 800 ) button = i + 1;
   /* When any of the buttons was pressed */
-  if ( *button != 0 )
-    debug_printf( "button %d was pressed...", *button );
+  if ( button != NO_BUTTON ) debug_printf( "button %d was pressed...", button );
   
-  return SUCCESS;
+  return button;
 }
 
 /*
  * function to receive datapacket
  * return - 0 when reception was successful
  */
-uint8_t receivePacket( boolean timeout ) {
-  int i;
-  for ( i = 0; i < PAYLOAD; i++ ) 
-    rx_message[i] = 0x00;
-  if ( !timeout ) {
-    boolean done = false;
-    while ( !radio.available() );
-    while ( !done )
-      done = radio.read( rx_message, radio.getPayloadSize() );
-  } else {
-    // Wait here until we get a response, or timeout (200ms)
-    unsigned long started_waiting_at = millis();
-    bool timeout = false;
-    while ( !radio.available() && !timeout )
-      if ( millis() - started_waiting_at > 200 )
-        timeout = true;
-
-    // Describe the results
-    if ( timeout ) {
-      debug_printf("Failed, response timed out.\n\r");
-      return TIMEOUT;
-    } else {
-      // Grab the response, compare, and send to debugging spew
-      radio.read( rx_message, radio.getPayloadSize() );
-    }
-  }
-  /* only receive packets which are for us */
-  if ( rx_message[DESTINATION] != role_id ) {
-    debug_printf( "different destination %X...", rx_message[DESTINATION] );
+uint8_t receivePacket( struct Packet rx_packet ) {
+  /* When we don't use timeout */
+  if ( !radio.available() ) return NO_DATA;
+  /* Read the data from the tranceiver */
+  radio.read( &rx_packet, radio.getPayloadSize() );
+  /* Only receive packets which are for us or broadcast packets for all clients */
+  if ( rx_packet.destination != role_id && rx_packet.destination != client_all_id ) {
+    debug_printf( "different destination %X source %X...", rx_packet.destination, rx_packet.source );
     return WRONG_DESTINATION;
   }
-  debug_printf( "source %X...", rx_message[SOURCE] );
+  debug_printf( "source %X...", rx_packet.source );
   return SUCCESS;
 }
 
@@ -144,31 +154,33 @@ uint8_t receivePacket( boolean timeout ) {
  * return - 0 when transmission successfuly finished
  */
 uint8_t transmitPacket( byte destination, byte command, byte data ) {
-  tx_message[DESTINATION] = destination;
-  tx_message[SOURCE] = role_id;
-  tx_message[COMMAND] = command;
-  tx_message[DATA] = data;
-  //tx_message[CHECKSUM] = destination ^ role_id ^ data;
+  /* Assemble the transmission packet */
+  struct Packet tx_packet;
+  tx_packet.destination = destination;
+  tx_packet.source = role_id;
+  tx_packet.command = command;
+  tx_packet.data = data;
   
   /* First, stop listening so we can talk */
   radio.stopListening();
-  /* send the packet to the chosen destination */
-  bool ok = radio.write( tx_message, radio.getPayloadSize() );
+  /* Send the packet to the chosen destination */
+  bool ok = radio.write( &tx_packet, radio.getPayloadSize() );
   /* Now, resume listening so we catch the next packets. */
   radio.startListening();
   
-  /* When the transmission was successful */
-  if ( ok )
-    debug_printf( "transmit %X ok\n", command );
-  else
-    debug_printf( "failed.\n\r" );
+  /* When the transmission was not successful */
+  if ( !ok ) {
+    debug_printf( "transmit failed.\n\r" );
+    return TRANSMIT_FAILED;
+  }
   
+  debug_printf( "transmit %X ok\n", command );
   return SUCCESS;
 }
 
 void setup() {
   /* Initialize serial connection */
-  Serial.begin( 57600 );
+  Serial.begin( BAUD_RATE );
   /* Direct printf to Arduino serial */
   printf_begin();
 
@@ -178,8 +190,7 @@ void setup() {
   /* optionally, increase the delay(1) between retries(2) & # of retries */
   radio.setRetries( 15, 15 );
 
-  // optionally, reduce the payload size.  seems to
-  // improve reliability
+  /* Optionally, reduce the payload size, seems to improve reliability */
   radio.setPayloadSize( PAYLOAD );
   radio.setAutoAck( true );
   radio.setDataRate( RF24_2MBPS );
@@ -187,19 +198,13 @@ void setup() {
 
   /* Open 'our' pipe for writing */
   /* Open the 'other' pipe for reading, in position #1 (we can have up to 5 pipes open for reading) */
-
-  pinMode( 9, OUTPUT );
   if ( role_id == client_id ) {
-    radio.openWritingPipe( pipes[0] );
-    radio.openReadingPipe( 1, pipes[1] );
-    debug_printf( "ROLE = client\n" );
-    /* Initialize defined button (set as input) */
-    int i;
-    for ( i = 0; i < BUTTONS_COUNT; i++ )
-      pinMode( buttons[i], INPUT );
-  } else {
     radio.openWritingPipe( pipes[1] );
     radio.openReadingPipe( 1, pipes[0] );
+    debug_printf( "ROLE = client\n" );
+  } else {
+    radio.openWritingPipe( pipes[0] );
+    radio.openReadingPipe( 1, pipes[1] );
     debug_printf( "ROLE = server\n" );
   }
 
@@ -207,69 +212,118 @@ void setup() {
   radio.startListening();
 
   /* Dump the configuration of the rf unit for debugging */
-  if ( DEBUG ) 
-    radio.printDetails();
+  if ( DEBUG ) radio.printDetails();
+    
+  /* Initialize the LEDs, 10 is also SPI SS*/
+  pinMode( 9, OUTPUT );
+  pinMode( 10, OUTPUT   );
+  digitalWrite( 9, LOW );
+  digitalWrite( 10, LOW );
 }
 
 void loop() {
   /* Client role, send vote and receive ack */
   if ( role_id == client_id ) {
-    /* Require new ID */
-    if ( role_id == 0xC0 ) {
-      transmitPacket( server_id, REQUEST_ID, role_id );
-    /* Active voting sate */
-    } else if ( voting_active ) {
-      uint8_t button = NO_BUTTON;
-      while ( button == NO_BUTTON ) {
-        getPressedButton( &button );
-      }
-      /* send packet to server */
-      transmitPacket( server_id, VOTE_ID, (byte) button );
-      
-      /* Take the time, and send it.  This will block until complete */
-      //unsigned long time = micros();
-      /* Transmit and receive time */
-      //debug_printf( "%d\n", micros() - time );
-    /* Done voting or voting dind't start yet */
-    } else {
-      if ( !radio.available() )
-        return;
+    uint8_t button = NO_BUTTON;
+    switch ( client_state ) {
+      /* Request for a new ID */
+      case REQUEST_ID: 
+        transmitPacket( server_id, REQUEST_ID, role_id );
+        client_old_state = REQUEST_ID;
+        client_state = WAITING_TRANSMISSION;
+        break;
+      /* Waiting voting to be started */
+      case WAITING_VOTING: 
+        setStatusLEDs( LOW, LOW, false ); 
+        break;
+      /* Wait for user to vote */
+      case ACTIVE_VOTING:
+        setStatusLEDs( LOW, HIGH, true );
+        button = getPressedButton();
+        /* When the user has voted, send the vote */
+        if ( button != NO_BUTTON ) {
+          transmitPacket( server_id, VOTE_ID, button );
+          client_old_state = ACTIVE_VOTING;
+          client_state = WAITING_TRANSMISSION;
+        }
+        break;
+      /* Done voting */
+      case FINISHED_VOTING: 
+        setStatusLEDs( HIGH, LOW, false ); 
+        break;
+      /* Wait packet to be transmitted */
+      case WAITING_TRANSMISSION: 
+        if ( started_wait_time == 0 ) started_wait_time = millis();
+        if ( millis() - started_wait_time > 100 ) client_state = client_old_state;
+        break;
     }
+    /* When we escaped transmission waiting state */
+    if ( client_state != WAITING_TRANSMISSION ) started_wait_time = 0;
+    
     /* Receive ack with timeout */
-    uint8_t response = receivePacket( true );
-    if ( response == TIMEOUT || response == WRONG_DESTINATION ) {
-      return;
-    }
-    switch ( rx_message[COMMAND] ) {
-      /* When vote status was received, change the voting status */
-      case VOTE_STATUS: debug_printf( "got vote status %X", rx_message[DATA] ); voting_active = rx_message[DATA]; break;
+    struct Packet rx_packet;
+    uint8_t response = receivePacket( rx_packet );
+    /* When responded with no data or wrong destination, don't process packet */
+    if ( response == NO_DATA || response == WRONG_DESTINATION ) return;
+    /* Process the received command in the packet */
+    switch ( rx_packet.command ) {
+      /* When vote state was received, change the voting state */
+      case VOTE_STATE: 
+        debug_printf( "got vote status %X", rx_packet.data ); 
+        client_state = rx_packet.data; 
+        break;
       /* When new ID from the server was received, assign it */
-      case REQUEST_ACK: debug_printf( "got new id %X\n", rx_message[DATA] ); role_id = client_id = rx_message[DATA]; break;
+      case REQUEST_ACK: 
+        debug_printf( "got new id %X\n", rx_packet.data ); 
+        role_id = client_id = rx_packet.data; 
+        client_state = WAITING_VOTING; 
+        break;
       /* When vote ack was received from server */
-      case VOTE_ACK: debug_printf( "got vote ack from server\n" ); digitalWrite( 9, HIGH ); break;
-      default: debug_printf( "unknown command received %X\n", rx_message[COMMAND] ); break;
+      case VOTE_ACK: 
+        debug_printf( "got vote ack from server\n" );  
+        client_state = FINISHED_VOTING; break;
+      default: 
+        debug_printf( "unknown command received %X\n", rx_packet.command ); 
+        break;
     }
-
-    // Try again 1s later
-    //delay(1000);
-    digitalWrite( 9, LOW );
   }
 
   /* Server role, receive vote and send ack */
   if ( role_id == server_id ) {
-    //digitalWrite( 9, HIGH );
-    uint8_t response = receivePacket( false );
-    if ( response == WRONG_DESTINATION ) {
-      
+    /* When there are clients connected to server and we receive command from serial */
+    if ( client_count > 0 ) {
+      uint8_t button = getPressedButton();
+      char command;
+      /* When there is data available in serial, read the data */
+      if ( Serial.available() ) command = Serial.read();
+      uint8_t state = 0;
+      /* Specify the command from serial */
+      if ( command == 'w' || button == 1 ) state = WAITING_VOTING;
+      else if ( command == 'f' || button == 2 ) state = FINISHED_VOTING;
+      else if ( command == 'a' || button == 3 ) state = ACTIVE_VOTING;
+      /* When state was selected, send it to all the clients */
+      if ( state != 0 ) { transmitPacket( client_all_id, VOTE_STATE, state ); delay( 100 ); }
     }
-    //digitalWrite( 9, LOW );
     
-    switch ( rx_message[COMMAND] ) {
-      /* when ID request was received, generate and send a new ID for the new client */
-      case REQUEST_ID: debug_printf( "id request\n" ); uint8_t id; getClientID( &id ); transmitPacket( rx_message[SOURCE], REQUEST_ACK, id ); break;
-      /* when vote was received, send ack back to the client */
-      case VOTE_ID: debug_printf( "button %X was pressed\n", rx_message[DATA] ); transmitPacket( rx_message[SOURCE], VOTE_ACK, rx_message[DATA] ); break;
-      default: debug_printf( "unknown command received %X\n", rx_message[COMMAND] ); break;
+    struct Packet rx_packet;
+    uint8_t response = receivePacket( rx_packet );
+    /* When responded with no data or wrong destination, don't process packet */
+    if ( response == NO_DATA || response == WRONG_DESTINATION ) return;
+    
+    switch ( rx_packet.command ) {
+      /* When ID request was received, generate and send a new ID for the new client */
+      case REQUEST_ID: 
+        debug_printf( "id request\n" ); 
+        transmitPacket( rx_packet.source, REQUEST_ACK, getNewClientID() ); 
+        break;
+      /* When vote was received, send ack back to the client */
+      case VOTE_ID: 
+        debug_printf( "button %X was pressed\n", rx_packet.data ); 
+        transmitPacket( rx_packet.source, VOTE_ACK, rx_packet.data ); 
+        break;
+      default: 
+        debug_printf( "unknown command received %X\n", rx_packet.command ); 
+        break;
     }
   }
 
