@@ -7,20 +7,16 @@ Arduino based voteing system, which can manage hundreds of voteremotes
 
 INSTALLATION:
 
-tips:
-in Mirf.h you need to change WProgram.h include to Arduino.h when using arduino 1.0
-
-steps:
 1) install https://github.com/maniacbug/RF24/ library for arduino
 2) download this repository
 git clone git://github.com/silps/voteino.git
 3) now the voteino.ino sketch can be opened for upload
 4) for the python server we need to install the following
-#unpack and install django
+`#unpack and install django
 tar xzvf Django-1.4.tar.gz
 cd Django-1.4
 sudo python setup.py install && cd ..
-
+`
 #install python serial library
 sudo apt-get install python-serial
 
