@@ -11,15 +11,28 @@ tips:
 in Mirf.h you need to change WProgram.h include to Arduino.h when using arduino 1.0
 
 steps:
-1) donwload and copy the tranceiver library to your arduino libraries folder
-2) dowlonad and add the voteino examples to Arduino exaples
-
-commands:
-cd /var/tmp
-git clone git://github.com/aaronds/arduino-nrf24l01.git
-mv arduino-nrf24l01/Mirf /usr/local/arduino-1.0/libraries
+1) install https://github.com/maniacbug/RF24/ library for arduino
+2) download this repository
 git clone git://github.com/silps/voteino.git
-mkdir /usr/local/arduino-1.0/examples/Voteino /usr/local/arduino-1.0/examples/Voteino/server
-mkdir /usr/local/arduino-1.0/examples/Voteino/client
-mv voteino/voteino_client.ino /usr/local/arduino-1.0/examples/Voteino/client/
-mv voteino/voteino_server.ino /usr/local/arduino-1.0/examples/Voteino/server/
+3) now the voteino.ino sketch can be opened for upload
+4) for the python server we need to install the following
+#unpack and install django
+tar xzvf Django-1.4.tar.gz
+cd Django-1.4
+sudo python setup.py install && cd ..
+
+#install python serial library
+sudo apt-get install python-serial
+
+#install django-dajax
+git clone https://github.com/jorgebastida/django-dajax.git
+cd django-dajax
+sudo python setup.py install && cd ..
+
+#install django-dajaxice
+git clone https://github.com/jorgebastida/django-dajaxice.git
+cd django-dajaxice
+sudo python django-dajaxice/setup.py install && cd ..
+5) now go to voteino_server folder and type
+sudo python manage.py runserver 80
+6) open browser and type localhost to see the client side, localhost/admin for admin side (user: test, pass: test)
