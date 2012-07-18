@@ -1,0 +1,40 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }} | {% trans 'Voteino site user' %}{% endblock %}
+
+{% block branding %}
+<h1 id="site-name">{% trans 'Voteino clinet' %}</h1>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="/polls">{% trans 'Home' %}</a>
+</div>
+{% endblock %}
+
+{% block content %}
+    <div class="module" id="changelist">
+      {% block result_list %}
+          {% if latest_poll_list %}
+              <table id="result_list" style="width: 100%">
+                <thead>
+                  <tr>
+                    <th scope="col" class="sortable">Question</th>
+                  </tr>
+                </thead>
+                {% for poll in latest_poll_list %}
+                  <tr>
+                    <td class="row{{ poll.id }}">
+                      <a href="/polls/{{ poll.id }}/">{{ poll.question }}</a>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </table>
+          {% else %}
+              <p>No polls are available.</p>
+          {% endif %}
+      {% endblock %}
+      {% block pagination %}{% endblock %}
+    </div>
+{% endblock %}

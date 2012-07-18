@@ -1,0 +1,80 @@
+{% extends "polls/index.html" %}
+
+{% load admin_static %}
+{% load dajaxice_templatetags %}
+
+
+{% block extrahead %}
+
+{% dajaxice_js_import %}
+
+<!--[if lt IE 9]><script language="javascript" type="text/javascript" src="{% static "js/excanvas.min.js" %}"></script><![endif]-->
+<script language="javascript" type="text/javascript" src="{% static "js/jquery.min.js" %}"></script>
+<script language="javascript" type="text/javascript" src="{% static "js/jquery.jqplot.min.js" %}"></script>
+<script language="javascript" type="text/javascript" src="{% static "js/jqplot.barRenderer.min.js" %}"></script>
+<script language="javascript" type="text/javascript" src="{% static "js/jqplot.categoryAxisRenderer.min.js" %}"></script>
+<script language="javascript" type="text/javascript" src="{% static "js/jqplot.pointLabels.min.js" %}"></script>
+<link rel="stylesheet" type="text/css" href="{% static "css/jquery.jqplot.css" %}" />
+
+{% endblock %}
+
+{% block content %}
+
+<script>
+// to keep track of old_data
+var old_data = new Array();
+function plot(data) {
+  // check if data has changed
+  if ( old_data.votes && old_data.choices &&
+       old_data.votes.length == data.votes.length &&
+       old_data.choices.length == data.choices.length ) {
+    var update = false;
+    for ( i = 0; i < data.votes.length; i++ ) {
+      if ( data.votes[i] != old_data.votes[i] ) update = true;
+      if ( data.choices[i] != old_data.choices[i] ) update = true;
+    }
+    // when there was no change, don't plot
+    if (!update) return;
+  }
+  // store data as old data
+  old_data = data;
+  // clean plot and make a new
+  $('#chart1').empty();
+  $.jqplot.config.enablePlugins = true;
+  var ticks = data.choices;
+
+  chart = $.jqplot('chart1', [data.votes], {
+    // Only animate if we're not using excanvas (not in IE 7 or IE 8)..
+    animate: !$.jqplot.use_excanvas,
+    title: {text: '{{ poll.question }}', fontSize: 100},
+    series: [{color:'169FFF'}],
+    seriesDefaults: {
+      renderer: $.jqplot.BarRenderer,
+      pointLabels: { show: true }
+    },
+    axes: {
+      fontSize:100,
+      xaxis: {
+        fontSize: 100,
+        renderer: $.jqplot.CategoryAxisRenderer,
+        ticks: ticks
+      }
+    },
+    highlighter: { show: false }
+  });
+}
+$(document).ready(function() {
+  // make the ajax request to get the voting data
+  Dajaxice.polls.getVotes(plot, {'poll_id':{{ poll.id }}});
+  // set a interval to renew the data every second
+  setInterval(function() {
+    Dajaxice.polls.getVotes(plot, {'poll_id':{{ poll.id }}});
+  }, 1000);
+});
+</script>
+
+<center>
+<div id="chart1" style="width: 75%; height: 800px;"></div>
+</center>
+
+{% endblock %}
