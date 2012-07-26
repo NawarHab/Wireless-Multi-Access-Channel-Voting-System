@@ -1,16 +1,24 @@
 /*
- Author (C) 2012 S. Kuusik <silver.kuusik@gmail.com>
- Author (C) 2012 B. Vittal <bala561989@gmail.com>
-
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU General Public License
- version 2 as published by the Free Software Foundation.
- */
-
-/**
- * Voteino client and server.
+ *  Voteino by Silver Kuusik ( Multiuser Voting system for Arduino )
+ *  Copyright (C) 2012 Silver Kuusik
  *
- * This is a multiuser voting system for nRF24L01+. It uses the RF24 library.
+ *  This library is free software; you can redistribute it and/or
+ *  modify it under the terms of the GNU Lesser General Public
+ *  License as published by the Free Software Foundation; either
+ *  version 2.1 of the License, or (at your option) any later version.
+ *
+ *  This library is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ *  Lesser General Public License for more details.
+ *
+ *  You should have received a copy of the GNU Lesser General Public
+ *  License along with this library; if not, write to the Free Software
+ *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *
+ *  Author (C) 2012 Silver Kuusik <silver.kuusik@gmail.com>
+ *  Contributor (C) 2012 Balachandar Vittal <bala561989@gmail.com>
+ *  Credits to https://github.com/maniacbug/RF24 developers, great project
  */
 
 #include <SPI.h>
@@ -31,7 +39,7 @@ uint8_t buttons[BUTTONS_COUNT] = { A1, A2, A3, A4 };
 uint8_t server_id = 0xB0;
 uint8_t client_id = 0xC0;
 uint8_t client_all_id = 0xAA;
-/* The role of the current running sketch */
+/* The role of the current running sketch ( server_id or client_id )*/
 uint8_t role_id = server_id;
 
 /* VOTING RESULTS */
@@ -79,7 +87,7 @@ uint8_t client_state = REQUEST_ID;
 /* Set up nRF24L01 radio on SPI bus plus pins CE 8 & CSN 7 */
 RF24 radio( 8, 7 );
 
-/* Radio pipe addresses for the 2 nodes to communicate (why LL) ? */
+/* Radio pipe addresses for the 2 nodes to communicate */
 const uint64_t pipes[2] = { 0xF0F0F0F0AA, 0xF0F0F0F0BB };
 
 /* Number of clients who are voting */
