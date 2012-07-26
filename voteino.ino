@@ -39,7 +39,7 @@ uint8_t buttons[BUTTONS_COUNT] = { A1, A2, A3, A4 };
 uint8_t server_id = 0xB0;
 uint8_t client_id = 0xC0;
 uint8_t client_all_id = 0xAA;
-/* The role of the current running sketch */
+/* The role of the current running sketch ( server_id or client_id )*/
 uint8_t role_id = server_id;
 
 /* VOTING RESULTS */
