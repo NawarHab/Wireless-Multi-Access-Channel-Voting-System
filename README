@@ -1,15 +1,19 @@
-VOTEINO
-=======
+DESCRIPTION
+===========
 
-DESCRIPTION:
+* Arduino based portable multiuser voting system
+* was tested with 4 voterremotes and 1 server
 
-Arduino based portable multiuser voting system, was tested with 4 voterremotes and 1 server
 
-DOCUMENTATION:
+DOCUMENTATION
+=============
 
-For hardware and software configuration check https://github.com/silps/voteino/wiki
+For hardware and software configuration check https://github.com/silps/voteino/wiki/Configuration
 
-INSTALLATION:
+
+INSTALLATION
+============
+
 #if you are using windows download the repositories in zip or 
 #check https://github.com/msysgit/msysgit/wiki/InstallMSysGit to use git
 #to use python in windows check http://docs.python.org/using/windows.html
@@ -38,8 +42,12 @@ cd django-dajaxice && sudo python django-dajaxice/setup.py install && cd ..
 5) once installed we can run the server
 cd voteino/voteino_server && sudo python manage.py runserver 80
 6) open browser and type localhost to see the client side, localhost/admin for admin side (user: test, pass: test)
+7) to access the development server locally from another device use sudo python manage.py runserver 0.0.0.0:80
 
-#credits to developers of and all the others ^-^
+
+CREDITS ^-^
+===========
+* labmates
 * https://github.com/maniacbug/RF24/
 * https://github.com/jorgebastida/django-dajax
 * https://github.com/jorgebastida/django-dajaxice
