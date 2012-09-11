@@ -48,7 +48,7 @@ cd voteino/voteino_server && sudo python manage.py runserver 80
 CREDITS ^-^
 ===========
 
-* labmates
+* labmates and supervisors
 * https://github.com/maniacbug/RF24/
 * https://github.com/jorgebastida/django-dajax
 * https://github.com/jorgebastida/django-dajaxice
