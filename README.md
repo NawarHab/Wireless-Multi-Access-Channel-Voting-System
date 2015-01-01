@@ -1,6 +1,8 @@
 DESCRIPTION
 ===========
 
+<img src="https://lh3.googleusercontent.com/-Lm9tx6z2f44/T_IAwTHJOoI/AAAAAAAAHtM/Ms3wbcFrrfQ/w1252-h939-no/DSCN1303.JPG" alt="voteino" width="50%">
+
 * Arduino based portable multiuser voting system
 * was tested with 4 voterremotes and 1 server
 
