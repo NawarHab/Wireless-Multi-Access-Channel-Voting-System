@@ -20,10 +20,10 @@ INSTALLATION
 * check https://github.com/msysgit/msysgit/wiki/InstallMSysGit to use git
 * to use python in windows check http://docs.python.org/using/windows.html
 
-1) install https://github.com/maniacbug/RF24/ library for arduino
-2) download this repository
-3) upload voteino.ino on your arduino
-4) for using the python server we need to install django, python-serial and dajax
+1. install https://github.com/maniacbug/RF24/ library for arduino
+2. download this repository
+3. upload voteino.ino on your arduino
+4. for using the python server we need to install django, python-serial and dajax
 
 * unpack and install django
 ```bash
@@ -45,10 +45,10 @@ cd django-dajax && sudo python setup.py install && cd ..
 git clone https://github.com/jorgebastida/django-dajaxice.git
 cd django-dajaxice && sudo python django-dajaxice/setup.py install && cd ..
 ```
-5) once installed we can run the server
+5. once installed we can run the server
 cd voteino/voteino_server && sudo python manage.py runserver 80
-6) open browser and type localhost to see the client side, localhost/admin for admin side (user: test, pass: test)
-7) to access the development server locally from another device use sudo python manage.py runserver 0.0.0.0:80
+6. open browser and type localhost to see the client side, localhost/admin for admin side (user: test, pass: test)
+7. to access the development server locally from another device use sudo python manage.py runserver 0.0.0.0:80
 
 
 CREDITS ^-^
