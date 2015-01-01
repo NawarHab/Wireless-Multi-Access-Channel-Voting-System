@@ -6,12 +6,10 @@ DESCRIPTION
 * Arduino based portable multiuser voting system
 * was tested with 4 voterremotes and 1 server
 
-
 DOCUMENTATION
 =============
 
 For hardware and software configuration check https://github.com/silps/voteino/wiki/Configuration
-
 
 INSTALLATION
 ============
@@ -24,6 +22,10 @@ INSTALLATION
 2. download this repository
 3. upload voteino.ino on your arduino
 4. for using the python server we need to install django, python-serial and dajax
+5. once installed we can run the server
+cd voteino/voteino_server && sudo python manage.py runserver 80
+6. open browser and type localhost to see the client side, localhost/admin for admin side (user: test, pass: test)
+7. to access the development server locally from another device use sudo python manage.py runserver 0.0.0.0:80
 
 * unpack and install django
 ```bash
@@ -45,11 +47,6 @@ cd django-dajax && sudo python setup.py install && cd ..
 git clone https://github.com/jorgebastida/django-dajaxice.git
 cd django-dajaxice && sudo python django-dajaxice/setup.py install && cd ..
 ```
-5. once installed we can run the server
-cd voteino/voteino_server && sudo python manage.py runserver 80
-6. open browser and type localhost to see the client side, localhost/admin for admin side (user: test, pass: test)
-7. to access the development server locally from another device use sudo python manage.py runserver 0.0.0.0:80
-
 
 CREDITS ^-^
 ===========
