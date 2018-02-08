@@ -1,7 +1,7 @@
 DESCRIPTION
 ===========
 
-<img src="https://lh3.googleusercontent.com/-Lm9tx6z2f44/T_IAwTHJOoI/AAAAAAAAHtM/Ms3wbcFrrfQ/w1252-h939-no/DSCN1303.JPG" alt="voteino" width="50%">
+<img src="https://lh3.googleusercontent.com/J_2av7R-Mz8IiofyyfmqugvMVvBefm7BMVB8buKo75gKV049bfUAHR1X6X-0sTd926LYMO7Unt9gty9m0HQOH2S0VKtw2cL3ajzmw9BzAGVfKWkT57F4zLJM3Y1bH7aKvniHiE9Q7Gt3sgbEvU1WCaTOHFb7JSaLuPNQOgdTBA1iLswC-lst_WTBEX4NKHYiz1CvzI2zXWdrL-6_KNHWl1Jf_zZUgDdPPfYTJPaGV2_Ui2s9L565vLy-8w3fFwbtaX9i_5ILH7toFIXC1okxs9eJ4hIPcgq5DapG3tdK4nX2A3B3gYIAA0N_iJm3kv8OJYMdyP2EMXOFUD9TdqC93SyiYOE5sdwOjvH5ROEp3elusGsRUsUZTG4EDqSX2b-Tb7a6bmksuI-PZS-72erUVf05XtnQBJaakB323c68GlI9u0Z5Rgat9oS-9hdx4KzHWobNV7Hwd2cznlJKQ87RwfOk0rYbQw6FFCrbXqO0rU2YYQsGg8JA12MR5My2jFW4JOjqaLnEUAYwpdE4qha3Kd5NIs_2_9yBzDTVaDNlJEManJIhvEU_KZwBYDDP4q-E80MPuuq7vPaOwmXwId2yGBqL2_2gsnXKUgz06hzI=w936-h702-no" alt="voteino" width="50%">
 
 * Arduino based portable multiuser voting system
 * was tested with 4 voterremotes and 1 server
